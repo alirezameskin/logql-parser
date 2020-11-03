@@ -86,9 +86,25 @@ object LogQueryParser extends RegexParsers {
   val condition: Parser[ConditionFilterExpr] =
     "|" ~> andOr | "|" ~> expression
 
+  //parser pipelines
+  val jsonParser: Parser[PipelineExpr] =
+    "|" ~> "json" ^^ (_ => JsonParserExpr)
+
+  val logFmtParser: Parser[PipelineExpr] =
+    "|" ~> "logfmt" ^^ (_ => LogFmtExpr)
+
+  val lineFormat: Parser[LineFormatExpr] =
+    "|" ~> "line_format" ~ string ^^ { case _ ~ fmt => LineFormatExpr(fmt) }
+
+  val regexp: Parser[RegexpExpr] =
+    "|" ~> "regexp" ~ string ^^ { case _ ~ reg => RegexpExpr(reg) }
+
+  val parser: Parser[PipelineExpr] =
+    lineFormat | jsonParser | logFmtParser | regexp
+
   // Pipelines
   val pipelines: Parser[List[PipelineExpr]] =
-    rep(condition | lineFilter)
+    rep(condition | lineFilter | parser)
 
   // Query pattern
   val query: Parser[LogQueryExpr] = labels ~ pipelines ^^ {
