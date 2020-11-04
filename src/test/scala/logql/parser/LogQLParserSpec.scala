@@ -1,5 +1,7 @@
 package logql.parser
 
+import java.util.concurrent.TimeUnit
+
 import logql.parser.AST._
 import org.scalatest.funsuite.AnyFunSuite
 import org.scalatest.matchers.should.Matchers._
@@ -53,10 +55,13 @@ class LogQLParserSpec extends AnyFunSuite {
   }
 
   test("Test filters with simple condition") {
-    LogQueryParser.parse("""{label1="val"} |= "plaintext" | age = 10""") shouldBe Right(
+    LogQueryParser.parse("""{label1="val"} |= "plaintext" | age = 10m """) shouldBe Right(
       LogQueryExpr(
         List(MatchEqual("label1", "val")),
-        List(LineFilterExpr(ContainsString, "plaintext"), ConditionExpr(AST.Equal, "age", Right(10)))
+        List(
+          LineFilterExpr(ContainsString, "plaintext"),
+          ConditionExpr(AST.Equal, "age", DurationValue(10.0, TimeUnit.MINUTES))
+        )
       )
     )
   }
@@ -65,21 +70,21 @@ class LogQLParserSpec extends AnyFunSuite {
     LogQueryParser.parse("""{label1="val"} | num = 10 | age = 10""") shouldBe Right(
       LogQueryExpr(
         List(MatchEqual("label1", "val")),
-        List(ConditionExpr(AST.Equal, "num", Right(10)), ConditionExpr(AST.Equal, "age", Right(10)))
+        List(ConditionExpr(AST.Equal, "num", NumberValue(10)), ConditionExpr(AST.Equal, "age", NumberValue(10)))
       )
     )
   }
 
   test("Test filters with and condition") {
-    LogQueryParser.parse("""{label1="val"} |= "plaintext" | age = 10 and num > 10 """) shouldBe
+    LogQueryParser.parse("""{label1="val"} |= "plaintext" | age = 10 and num > 10.5s """) shouldBe
       Right(
         LogQueryExpr(
           List(MatchEqual("label1", "val")),
           List(
             LineFilterExpr(ContainsString, "plaintext"),
             AndCondition(
-              ConditionExpr(AST.Equal, "age", Right(10)),
-              ConditionExpr(AST.GreaterThan, "num", Right(10.0))
+              ConditionExpr(AST.Equal, "age", NumberValue(10)),
+              ConditionExpr(AST.GreaterThan, "num", DurationValue(10.5, TimeUnit.SECONDS))
             )
           )
         )
@@ -98,10 +103,10 @@ class LogQLParserSpec extends AnyFunSuite {
             LineFilterExpr(ContainsString, "plaintext"),
             OrCondition(
               AndCondition(
-                ConditionExpr(AST.Equal, "age", Right(10)),
-                ConditionExpr(AST.GreaterThan, "num", Right(10.0))
+                ConditionExpr(AST.Equal, "age", NumberValue(10)),
+                ConditionExpr(AST.GreaterThan, "num", NumberValue(10.0))
               ),
-              ConditionExpr(AST.LessEqual, "num2", Right(101))
+              ConditionExpr(AST.LessEqual, "num2", NumberValue(101))
             )
           )
         )
@@ -116,10 +121,10 @@ class LogQLParserSpec extends AnyFunSuite {
           List(
             LineFilterExpr(ContainsString, "plaintext"),
             AndCondition(
-              ConditionExpr(AST.Equal, "age", Right(10)),
-              ConditionExpr(AST.GreaterThan, "num", Right(10))
+              ConditionExpr(AST.Equal, "age", NumberValue(10)),
+              ConditionExpr(AST.GreaterThan, "num", NumberValue(10))
             ),
-            ConditionExpr(AST.LessEqual, "num2", Right(10))
+            ConditionExpr(AST.LessEqual, "num2", NumberValue(10))
           )
         )
       )
@@ -132,8 +137,8 @@ class LogQLParserSpec extends AnyFunSuite {
         List(
           LineFilterExpr(ContainsString, "test"),
           JsonParserExpr,
-          ConditionExpr(AST.Equal, "num", Right(10)),
-          ConditionExpr(AST.Equal, "age", Right(10))
+          ConditionExpr(AST.Equal, "num", NumberValue(10)),
+          ConditionExpr(AST.Equal, "age", NumberValue(10))
         )
       )
     )
@@ -148,7 +153,7 @@ class LogQLParserSpec extends AnyFunSuite {
         List(
           LineFilterExpr(ContainsString, "bar"),
           JsonParserExpr,
-          ConditionExpr(GreaterEqual, "latency", Right(250.0)),
+          ConditionExpr(GreaterEqual, "latency", NumberValue(250.0)),
           LineFormatExpr("blip{{ .foo }}blop {{.status_code}}")
         )
       )
@@ -168,10 +173,10 @@ class LogQLParserSpec extends AnyFunSuite {
           RegexpExpr("""(?P<method>\\w+) (?P<path>[\\w|/]+) \\((?P<status>\\d+?)\\) (?P<duration>.*)"""),
           AndCondition(
             OrCondition(
-              ConditionExpr(GreaterThan, "duration", Right(1.0)),
-              ConditionExpr(Equal, "status", Right(200.0))
+              ConditionExpr(GreaterThan, "duration", NumberValue(1.0)),
+              ConditionExpr(Equal, "status", NumberValue(200.0))
             ),
-            ConditionExpr(Equal, "method", Left("POST"))
+            ConditionExpr(Equal, "method", StringValue("POST"))
           ),
           LineFormatExpr("{{.duration}}|{{.method}}|{{.status}}")
         )

@@ -10,6 +10,6 @@ case class LineFilterExpr(typeMatch: LineFilterMatchType, matchStr: String) exte
 
 sealed trait ConditionFilterExpr extends PipelineExpr
 
-case class ConditionExpr(typ: ConditionType, field: String, value: Either[String, Double]) extends ConditionFilterExpr
-case class AndCondition(v1: ConditionFilterExpr, v2: ConditionFilterExpr)                  extends ConditionFilterExpr
-case class OrCondition(v1: ConditionFilterExpr, v2: ConditionFilterExpr)                   extends ConditionFilterExpr
+case class ConditionExpr(typ: ConditionType, field: String, value: Value) extends ConditionFilterExpr
+case class AndCondition(v1: ConditionFilterExpr, v2: ConditionFilterExpr) extends ConditionFilterExpr
+case class OrCondition(v1: ConditionFilterExpr, v2: ConditionFilterExpr)  extends ConditionFilterExpr

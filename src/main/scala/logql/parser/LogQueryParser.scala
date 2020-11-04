@@ -1,18 +1,26 @@
 package logql.parser
 
+import java.util.concurrent.TimeUnit
+
 import scala.util.parsing.combinator.RegexParsers
 
 object LogQueryParser extends RegexParsers {
+  private val DURATION_PATTERN = """(\d+(\.\d*)?|\d*\.\d+)(ns|us|µs|ms|s|m|h)""".r
+
   import logql.parser.AST._
 
   val ident: Parser[String] =
     "[a-zA-Z0-9_]+".r
 
   val number: Parser[String] =
-    """-?\d+""".r
+    """(\d+(\.\d*)?|\d*\.\d+)""".r
 
   val string: Parser[String] =
     "\"" ~> """([^"\x00-\x1F\x7F\\]|\\[\\'"bfnrt]|\\u[a-fA-F0-9]{4})*""".r <~ "\""
+
+  //duration
+  val duration: Parser[String] =
+    DURATION_PATTERN
 
   // Label matchers
   val equalLabel: Parser[MatchEqual] =
@@ -51,22 +59,22 @@ object LogQueryParser extends RegexParsers {
 
   // Conditions
   val equalExpr: Parser[ConditionFilterExpr] =
-    ident ~ "=" ~ (string | number) ^^ { case name ~ _ ~ value => ConditionExpr(AST.Equal, name, toDoubleOrString(value)) }
+    ident ~ "=" ~ (duration | number | string) ^^ { case name ~ _ ~ value => ConditionExpr(AST.Equal, name, toValue(value)) }
 
   val notEqualExpr: Parser[ConditionFilterExpr] =
-    ident ~ "!=" ~ (string | number) ^^ { case name ~ _ ~ value => ConditionExpr(AST.NotEqual, name, toDoubleOrString(value)) }
+    ident ~ "!=" ~ (duration | string | number) ^^ { case name ~ _ ~ value => ConditionExpr(AST.NotEqual, name, toValue(value)) }
 
   val greaterThanExpr: Parser[ConditionFilterExpr] =
-    ident ~ ">" ~ number ^^ { case field ~ _ ~ num => ConditionExpr(AST.GreaterThan, field, toDoubleOrString(num)) }
+    ident ~ ">" ~ (duration | number) ^^ { case field ~ _ ~ num => ConditionExpr(AST.GreaterThan, field, toValue(num)) }
 
   val greaterEqualExpr: Parser[ConditionFilterExpr] =
-    ident ~ ">=" ~ number ^^ { case field ~ _ ~ num => ConditionExpr(AST.GreaterEqual, field, toDoubleOrString(num)) }
+    ident ~ ">=" ~ (duration | number) ^^ { case field ~ _ ~ num => ConditionExpr(AST.GreaterEqual, field, toValue(num)) }
 
   val lessThanExpr: Parser[ConditionFilterExpr] =
-    ident ~ "<" ~ number ^^ { case field ~ _ ~ num => ConditionExpr(AST.LessThan, field, toDoubleOrString(num)) }
+    ident ~ "<" ~ (duration | number) ^^ { case field ~ _ ~ num => ConditionExpr(AST.LessThan, field, toValue(num)) }
 
   val lessEqualExpr: Parser[ConditionFilterExpr] =
-    ident ~ "<=" ~ number ^^ { case field ~ _ ~ num => ConditionExpr(AST.LessEqual, field, toDoubleOrString(num)) }
+    ident ~ "<=" ~ (duration | number) ^^ { case field ~ _ ~ num => ConditionExpr(AST.LessEqual, field, toValue(num)) }
 
   lazy val andOr: Parser[ConditionFilterExpr] =
     expression ~ rep(("and" | "or") ~ expression) ^^ {
@@ -111,10 +119,26 @@ object LogQueryParser extends RegexParsers {
     case labels ~ filters => LogQueryExpr(labels, filters)
   }
 
-  private def toDoubleOrString(value: String): Either[String, Double] =
-    value.toDoubleOption match {
-      case Some(number) => Right(number)
-      case None         => Left(value)
+  private def toValue(value: String): Value =
+    value match {
+      case DURATION_PATTERN(number, _, unit) => DurationValue(number.toDouble, toTimeUnit(unit))
+      case _ =>
+        value.toDoubleOption match {
+          case Some(number) => NumberValue(number)
+          case None         => StringValue(value)
+        }
+    }
+
+  private def toTimeUnit(unit: String): TimeUnit =
+    unit match {
+      case "ns" => TimeUnit.NANOSECONDS
+      case "us" => TimeUnit.MICROSECONDS
+      case "µs" => TimeUnit.MICROSECONDS
+      case "ms" => TimeUnit.MILLISECONDS
+      case "s"  => TimeUnit.SECONDS
+      case "m"  => TimeUnit.MINUTES
+      case "h"  => TimeUnit.HOURS
+      case _    => TimeUnit.SECONDS
     }
 
   def parse(string: String): Either[String, LogQueryExpr] =
