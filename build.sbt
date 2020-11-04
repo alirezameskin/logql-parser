@@ -1,7 +1,9 @@
 import Dependencies._
 
 name := "logql-parser"
-version := "0.0.1"
+organization := "com.github.alirezameskin"
+
+version := "0.0.1-SNAPSHOT"
 scalaVersion := "2.13.3"
 
 libraryDependencies ++= Seq(
@@ -11,4 +13,4 @@ libraryDependencies ++= Seq(
 
 githubOwner := "alirezameskin"
 githubRepository := "logql-parser"
-githubTokenSource := TokenSource.GitConfig("github.token")
+githubTokenSource := TokenSource.Or(TokenSource.Environment("GITHUB_TOKEN"), TokenSource.GitConfig("github.token"))
