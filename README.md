@@ -18,12 +18,14 @@ res2: Right(
           ),
           List(
             LineFilterExpr(ContainsString, "plaintext"),
-            OrCondition(
-              AndCondition(
-                ConditionExpr(AST.Equal, "age", NumberValue(10)),
-                ConditionExpr(AST.GreaterThan, "num", NumberValue(10.0))
-              ),
-              ConditionExpr(AST.LessEqual, "num2", DurationValue(101, TimeUnit.SECONDS))
+            ConditionExpr(
+                OrCondition(
+                  AndCondition(
+                    CompareCondition(AST.Equal, "age", NumberValue(10)),
+                    CompareCondition(AST.GreaterThan, "num", NumberValue(10.0))
+                  ),
+                  CompareCondition(AST.LessEqual, "num2", DurationValue(101, TimeUnit.SECONDS))
+                )
             )
           )
         )

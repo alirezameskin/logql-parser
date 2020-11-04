@@ -60,7 +60,9 @@ class LogQLParserSpec extends AnyFunSuite {
         List(MatchEqual("label1", "val")),
         List(
           LineFilterExpr(ContainsString, "plaintext"),
-          ConditionExpr(AST.Equal, "age", DurationValue(10.0, TimeUnit.MINUTES))
+          ConditionExpr(
+            CompareCondition(AST.Equal, "age", DurationValue(10.0, TimeUnit.MINUTES))
+          )
         )
       )
     )
@@ -70,7 +72,10 @@ class LogQLParserSpec extends AnyFunSuite {
     LogQueryParser.parse("""{label1="val"} | num = 10 | age = 10""") shouldBe Right(
       LogQueryExpr(
         List(MatchEqual("label1", "val")),
-        List(ConditionExpr(AST.Equal, "num", NumberValue(10)), ConditionExpr(AST.Equal, "age", NumberValue(10)))
+        List(
+          ConditionExpr(CompareCondition(AST.Equal, "num", NumberValue(10))),
+          ConditionExpr(CompareCondition(AST.Equal, "age", NumberValue(10)))
+        )
       )
     )
   }
@@ -82,9 +87,11 @@ class LogQLParserSpec extends AnyFunSuite {
           List(MatchEqual("label1", "val")),
           List(
             LineFilterExpr(ContainsString, "plaintext"),
-            AndCondition(
-              ConditionExpr(AST.Equal, "age", NumberValue(10)),
-              ConditionExpr(AST.GreaterThan, "num", DurationValue(10.5, TimeUnit.SECONDS))
+            ConditionExpr(
+              AndCondition(
+                CompareCondition(AST.Equal, "age", NumberValue(10)),
+                CompareCondition(AST.GreaterThan, "num", DurationValue(10.5, TimeUnit.SECONDS))
+              )
             )
           )
         )
@@ -101,12 +108,14 @@ class LogQLParserSpec extends AnyFunSuite {
           ),
           List(
             LineFilterExpr(ContainsString, "plaintext"),
-            OrCondition(
-              AndCondition(
-                ConditionExpr(AST.Equal, "age", NumberValue(10)),
-                ConditionExpr(AST.GreaterThan, "num", NumberValue(10.0))
-              ),
-              ConditionExpr(AST.LessEqual, "num2", NumberValue(101))
+            ConditionExpr(
+              OrCondition(
+                AndCondition(
+                  CompareCondition(AST.Equal, "age", NumberValue(10)),
+                  CompareCondition(AST.GreaterThan, "num", NumberValue(10.0))
+                ),
+                CompareCondition(AST.LessEqual, "num2", NumberValue(101))
+              )
             )
           )
         )
@@ -120,11 +129,15 @@ class LogQLParserSpec extends AnyFunSuite {
           List(MatchEqual("label1", "val")),
           List(
             LineFilterExpr(ContainsString, "plaintext"),
-            AndCondition(
-              ConditionExpr(AST.Equal, "age", NumberValue(10)),
-              ConditionExpr(AST.GreaterThan, "num", NumberValue(10))
+            ConditionExpr(
+              AndCondition(
+                CompareCondition(AST.Equal, "age", NumberValue(10)),
+                CompareCondition(AST.GreaterThan, "num", NumberValue(10))
+              )
             ),
-            ConditionExpr(AST.LessEqual, "num2", NumberValue(10))
+            ConditionExpr(
+              CompareCondition(AST.LessEqual, "num2", NumberValue(10))
+            )
           )
         )
       )
@@ -137,8 +150,8 @@ class LogQLParserSpec extends AnyFunSuite {
         List(
           LineFilterExpr(ContainsString, "test"),
           JsonParserExpr,
-          ConditionExpr(AST.Equal, "num", NumberValue(10)),
-          ConditionExpr(AST.Equal, "age", NumberValue(10))
+          ConditionExpr(CompareCondition(AST.Equal, "num", NumberValue(10))),
+          ConditionExpr(CompareCondition(AST.Equal, "age", NumberValue(10)))
         )
       )
     )
@@ -153,7 +166,7 @@ class LogQLParserSpec extends AnyFunSuite {
         List(
           LineFilterExpr(ContainsString, "bar"),
           JsonParserExpr,
-          ConditionExpr(GreaterEqual, "latency", NumberValue(250.0)),
+          ConditionExpr(CompareCondition(GreaterEqual, "latency", NumberValue(250.0))),
           LineFormatExpr("blip{{ .foo }}blop {{.status_code}}")
         )
       )
@@ -171,14 +184,46 @@ class LogQLParserSpec extends AnyFunSuite {
           LogFmtExpr,
           LineFormatExpr("{{.msg}}"),
           RegexpExpr("""(?P<method>\\w+) (?P<path>[\\w|/]+) \\((?P<status>\\d+?)\\) (?P<duration>.*)"""),
-          AndCondition(
-            OrCondition(
-              ConditionExpr(GreaterThan, "duration", NumberValue(1.0)),
-              ConditionExpr(Equal, "status", NumberValue(200.0))
-            ),
-            ConditionExpr(Equal, "method", StringValue("POST"))
+          ConditionExpr(
+            AndCondition(
+              OrCondition(
+                CompareCondition(GreaterThan, "duration", NumberValue(1.0)),
+                CompareCondition(Equal, "status", NumberValue(200.0))
+              ),
+              CompareCondition(Equal, "method", StringValue("POST"))
+            )
           ),
           LineFormatExpr("{{.duration}}|{{.method}}|{{.status}}")
+        )
+      )
+    )
+  }
+
+  test("Query with label_format pipeline") {
+    LogQueryParser.parse(
+      """{app="foo"} |= "bar" | json | latency >= 250ms or ( status_code < 500 and status_code > 200) | label_format foo=bar,status_code="buzz{{.bar}}" | logfmt """
+    ) shouldBe Right(
+      LogQueryExpr(
+        List(MatchEqual("app", "foo")),
+        List(
+          LineFilterExpr(ContainsString, "bar"),
+          JsonParserExpr,
+          ConditionExpr(
+            OrCondition(
+              CompareCondition(GreaterEqual, "latency", DurationValue(250, TimeUnit.MILLISECONDS)),
+              AndCondition(
+                CompareCondition(LessThan, "status_code", NumberValue(500)),
+                CompareCondition(GreaterThan, "status_code", NumberValue(200))
+              )
+            )
+          ),
+          LabelFormatExpr(
+            List(
+              RenameLabelFormat("foo", "bar"),
+              TemplateLabelFormat("status_code", "buzz{{.bar}}")
+            )
+          ),
+          LogFmtExpr
         )
       )
     )

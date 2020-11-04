@@ -58,41 +58,43 @@ object LogQueryParser extends RegexParsers {
     containsString | containsNotString | containsRegex | containsNotRegex
 
   // Conditions
-  val equalExpr: Parser[ConditionFilterExpr] =
-    ident ~ "=" ~ (duration | number | string) ^^ { case name ~ _ ~ value => ConditionExpr(AST.Equal, name, toValue(value)) }
+  val equalExpr: Parser[CompareCondition] =
+    ident ~ "=" ~ (duration | number | string) ^^ { case name ~ _ ~ value => CompareCondition(AST.Equal, name, toValue(value)) }
 
-  val notEqualExpr: Parser[ConditionFilterExpr] =
-    ident ~ "!=" ~ (duration | string | number) ^^ { case name ~ _ ~ value => ConditionExpr(AST.NotEqual, name, toValue(value)) }
+  val notEqualExpr: Parser[CompareCondition] =
+    ident ~ "!=" ~ (duration | string | number) ^^ {
+      case name ~ _ ~ value => CompareCondition(AST.NotEqual, name, toValue(value))
+    }
 
-  val greaterThanExpr: Parser[ConditionFilterExpr] =
-    ident ~ ">" ~ (duration | number) ^^ { case field ~ _ ~ num => ConditionExpr(AST.GreaterThan, field, toValue(num)) }
+  val greaterThanExpr: Parser[CompareCondition] =
+    ident ~ ">" ~ (duration | number) ^^ { case field ~ _ ~ num => CompareCondition(AST.GreaterThan, field, toValue(num)) }
 
-  val greaterEqualExpr: Parser[ConditionFilterExpr] =
-    ident ~ ">=" ~ (duration | number) ^^ { case field ~ _ ~ num => ConditionExpr(AST.GreaterEqual, field, toValue(num)) }
+  val greaterEqualExpr: Parser[CompareCondition] =
+    ident ~ ">=" ~ (duration | number) ^^ { case field ~ _ ~ num => CompareCondition(AST.GreaterEqual, field, toValue(num)) }
 
-  val lessThanExpr: Parser[ConditionFilterExpr] =
-    ident ~ "<" ~ (duration | number) ^^ { case field ~ _ ~ num => ConditionExpr(AST.LessThan, field, toValue(num)) }
+  val lessThanExpr: Parser[CompareCondition] =
+    ident ~ "<" ~ (duration | number) ^^ { case field ~ _ ~ num => CompareCondition(AST.LessThan, field, toValue(num)) }
 
-  val lessEqualExpr: Parser[ConditionFilterExpr] =
-    ident ~ "<=" ~ (duration | number) ^^ { case field ~ _ ~ num => ConditionExpr(AST.LessEqual, field, toValue(num)) }
+  val lessEqualExpr: Parser[CompareCondition] =
+    ident ~ "<=" ~ (duration | number) ^^ { case field ~ _ ~ num => CompareCondition(AST.LessEqual, field, toValue(num)) }
 
-  lazy val andOr: Parser[ConditionFilterExpr] =
+  lazy val andOr: Parser[Condition] =
     expression ~ rep(("and" | "or") ~ expression) ^^ {
       case x ~ ls =>
-        ls.foldLeft[ConditionFilterExpr](x) {
+        ls.foldLeft[Condition](x) {
           case (e1, "and" ~ e2) => AndCondition(e1, e2)
           case (e1, "or" ~ e2)  => OrCondition(e1, e2)
         }
     }
 
-  val parenthesis: Parser[ConditionFilterExpr] =
+  val parenthesis: Parser[Condition] =
     "(" ~> andOr <~ ")"
 
-  val expression: Parser[ConditionFilterExpr] =
+  val expression: Parser[Condition] =
     parenthesis | lessEqualExpr | lessThanExpr | greaterEqualExpr | greaterThanExpr | equalExpr
 
-  val condition: Parser[ConditionFilterExpr] =
-    "|" ~> andOr | "|" ~> expression
+  val condition: Parser[ConditionExpr] =
+    ("|" ~> andOr | "|" ~> expression) ^^ (cnd => ConditionExpr(cnd))
 
   //parser pipelines
   val jsonParser: Parser[PipelineExpr] =
@@ -107,8 +109,19 @@ object LogQueryParser extends RegexParsers {
   val regexp: Parser[RegexpExpr] =
     "|" ~> "regexp" ~ string ^^ { case _ ~ reg => RegexpExpr(reg) }
 
+  lazy val labelRename: Parser[RenameLabelFormat] =
+    ident ~ "=" ~ ident ^^ { case oldN ~ _ ~ newN => RenameLabelFormat(oldN, newN) }
+
+  lazy val labelTpl: Parser[TemplateLabelFormat] =
+    ident ~ "=" ~ string ^^ { case name ~ _ ~ tpl => TemplateLabelFormat(name, tpl) }
+
+  val labelFmt: Parser[LabelFormatExpr] =
+    "|" ~> "label_format" ~ rep1sep(labelRename | labelTpl, ",") ^^ {
+      case _ ~ changes => LabelFormatExpr(changes)
+    }
+
   val parser: Parser[PipelineExpr] =
-    lineFormat | jsonParser | logFmtParser | regexp
+    lineFormat | jsonParser | logFmtParser | regexp | labelFmt
 
   // Pipelines
   val pipelines: Parser[List[PipelineExpr]] =
